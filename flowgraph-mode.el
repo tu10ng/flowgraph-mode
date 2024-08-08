@@ -71,7 +71,8 @@
    (name (symbol (* (any alnum "_-"))))
    (funcname (seq (? (any ".")) name))
    (funcheader (seq bol ws (group-n 1 funcname)))
-   (keyword (symbol "return" "if" "else"))))
+   (keyword (symbol "return" "if" "else" "for" "in"))
+   (const (symbol (* (any upper "_-"))))))
 
 (defmacro flowgraph-rx (&rest regexps)
   (eval `(rx-let ,flowgraph--rx-bindings
@@ -90,6 +91,9 @@
 (defvar flowgraph-font-lock-keywords
   `((,(flowgraph-rx keyword)
      . font-lock-keyword-face)
+    
+    (,(flowgraph-rx const)
+     . font-lock-constant-face)
     
     ;; (,(flowgraph-rx funcname)
     ;;  . foo)
@@ -130,6 +134,16 @@
 (defun flowgraph-indent-aligned? ()
   (= (% (current-indentation) flowgraph-indent-offset) 0))
 
+(defun flowgraph-rewind-irrelevant ()
+  (let ((continue t))
+    (while continue
+      (let ((starting (point)))
+        (skip-chars-backward "[:space:]\n")
+        (when (flowgraph-in-str-or-cmnt)
+          (flowgraph-rewind-past-str-cmnt))
+        ;; Rewind until the point no longer moves
+        (setq continue (/= starting (point)))))))
+
 (defun flowgraph-indent-line ()
   "Indent current line.
 
@@ -145,6 +159,11 @@ indentation behaves like haskell."
                      ((and (flowgraph-indent-aligned?)
                            (not (flowgraph-empty-line?)))
                       (current-indentation))
+                     ((save-excursion
+                        (back-to-indentation)
+                        (flowgraph-rewind-irrelevant)
+                        (looking-back ":"))
+                      (+ baseline flowgraph-indent-offset))
                      (t
                       baseline))))))
     (when indent
