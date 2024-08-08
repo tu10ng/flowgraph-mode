@@ -72,7 +72,7 @@
    (funcname (seq (? (any ".")) name))
    (funcheader (seq bol ws (group-n 1 funcname)))
    (keyword (symbol "return" "if" "else" "for" "in"))
-   (const (symbol (* (any upper "_-"))))))
+   (const (symbol (* (any upper "_-" num))))))
 
 (defmacro flowgraph-rx (&rest regexps)
   (eval `(rx-let ,flowgraph--rx-bindings
