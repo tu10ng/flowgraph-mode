@@ -68,9 +68,10 @@
  '((symbol (&rest x) (seq symbol-start (or x) symbol-end))
    (ws (* (any " \t")))
    (ws+ (+ (any " \t")))
-   (name (symbol (seq (+ (any alpha "_")) (* (any alnum "_")))))
-   (funcname name)
-   (keyword (symbol "return"))))
+   (name (symbol (* (any alnum "_-"))))
+   (funcname (seq (? (any ".")) name))
+   (funcheader (seq bol ws (group-n 1 funcname)))
+   (keyword (symbol "return" "if" "else"))))
 
 (defmacro flowgraph-rx (&rest regexps)
   (eval `(rx-let ,flowgraph--rx-bindings
@@ -87,11 +88,17 @@
   "Face used for inlay hint overlays.")
 
 (defvar flowgraph-font-lock-keywords
-  `((,(ahk-rx keyword)
+  `((,(flowgraph-rx keyword)
      . font-lock-keyword-face)
     
+    ;; (,(flowgraph-rx funcname)
+    ;;  . foo)
+    
+    ;; (,(flowgraph-rx funcheader)
+    ;;  (1 font-lock-function-name-face))
+    
     ;; function parameter
-    (,(ahk-rx (seq funcname ws (group-n 1 "(" (*? nonl) ")")))
+    (,(flowgraph-rx (seq bol ws funcname ws (group-n 1 "(" (*? (any alnum "_., ()&->" "\"")) ")")))
      (1 'flowgraph-inlay-hint-face))))
 
 (defvar flowgraph-mode-syntax-table
@@ -136,7 +143,7 @@ indentation behaves like haskell."
                                      (current-indentation))))
                     (cond
                      ((and (flowgraph-indent-aligned?)
-                           (/= (current-indentation) 0))
+                           (not (flowgraph-empty-line?)))
                       (current-indentation))
                      (t
                       baseline))))))
@@ -151,7 +158,8 @@ indentation behaves like haskell."
   (interactive)
   (let* ((baseline (save-excursion
                      (forward-line -1)
-                     (while (not (flowgraph-indent-aligned?))
+                     (while (not (and (flowgraph-indent-aligned?)
+                                      (not (flowgraph-empty-line?))))
                        (forward-line -1))
                      (current-indentation)))
          (max-indent (+ baseline flowgraph-indent-offset))
@@ -165,6 +173,10 @@ indentation behaves like haskell."
               (push (* i flowgraph-indent-offset) indent-positions))
             (nreverse indent-positions))))
     (cond
+     ((/= (current-column) indent)
+      (back-to-indentation)
+      (when (not (flowgraph-indent-aligned?))
+        (indent-line-to max-indent)))
      ((not (eq this-command last-command))
       (indent-line-to max-indent))
      (t
@@ -175,6 +187,10 @@ indentation behaves like haskell."
 
 
 ;;; Utility functions
+
+(defun flowgraph-empty-line? ()
+  "Returns t if looking at empty line, nil otherwise."
+  (looking-at "[ \t]*$"))
 
 
 ;;; Major mode
@@ -192,14 +208,15 @@ indentation behaves like haskell."
   
   (setq-local parse-sexp-ignore-comments t)
   (setq-local parse-sexp-lookup-properties t)
-  (setq-local comment-start ";")
+  (setq-local comment-start "; ")
   (setq-local comment-start-skip ";+ *")
   (setq-local comment-use-syntax t)
   (setq-local paragraph-start (concat "$\\|" page-delimiter))
   (setq-local paragraph-separate paragraph-start)
-  (setq-local paragraph-ignore-fill-prefix t)
+  (setq-local paragraph-ignore-fill-prefix t))
 
-  (add-to-list 'auto-mode-alist '("\\.flowgraph\\'" . flowgraph-mode)))
+;;;###autoload
+(add-to-list 'auto-mode-alist '("\\.flowgraph\\'" . flowgraph-mode))
 
 (provide 'flowgraph-mode)
 
